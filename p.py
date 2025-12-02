@@ -5,6 +5,9 @@ from typing import List, Dict, Tuple, Any
 import utils
 
 def get_current_drive() -> str:
+    """Получение текущего диска Windows"""
+    # TODO: Вернуть текущий диск (например: "C:")
+    # Использовать os.path.splitdrive()
     current_path = os.getcwd()
     drive, _ = os.path.splitdrive(current_path)
     if drive:
@@ -13,6 +16,10 @@ def get_current_drive() -> str:
     return 'C:'
 
 def list_available_drives() -> List[str]:
+    """Получение списка доступных дисков Windows"""
+    # TODO: Вернуть список доступных дисков (['C:', 'D:', ...])
+    # Использовать os.listdir('/') не подойдет для Windows!
+    # Исследовать: использовать win32api или другие методы
     drives_bitmask = ctypes.windll.kernel32.GetLogicalDrives()
     drives = []
     for i in range(26):
