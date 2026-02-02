@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Dict, Tuple, Any
 import utils
 
+
 def get_current_drive() -> str:
     """Получение текущего диска Windows"""
     # TODO: Вернуть текущий диск (например: "C:")
@@ -14,29 +15,63 @@ def get_current_drive() -> str:
         return drive
     # В случае, если не определился, возвращаем диск C:
     return 'C:'
-    pass
+
 
 def list_available_drives() -> List[str]:
-    """Получение списка доступных дисков Windows"""
-    # TODO: Вернуть список доступных дисков (['C:', 'D:', ...])
-    # Использовать os.listdir('/') не подойдет для Windows!
-    # Исследовать: использовать win32api или другие методы
-    drives_bitmask = ctypes.windll.kernel32.GetLogicalDrives()
-    drives = []
-    for i in range(26):
-        if drives_bitmask & (1 << i):
-            drive_letter = chr(65 + i) + ':'
-            drives.append(drive_letter)
-    return drives
-    pass
+    """Получение списка доступных дисков Windows с обработкой ошибок"""
+    if not utils.is_windows_os():
+        return ['/']
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        # Безопасный вызов GetLogicalDrives
+        GetLogicalDrives = ctypes.windll.kernel32.GetLogicalDrives
+        GetLogicalDrives.restype = wintypes.DWORD
+
+        drives_bitmask = GetLogicalDrives()
+
+        # Проверка на ошибку
+        if drives_bitmask == 0:
+            # Получаем код ошибки
+            last_error = ctypes.windll.kernel32.GetLastError()
+            print(f"Windows API error GetLogicalDrives: код {last_error}")
+            return ['C:']  # Запасной вариант
+
+        drives = []
+        for i in range(26):
+            if drives_bitmask & (1 << i):
+                drive_letter = chr(65 + i) + ':'
+
+                # Проверяем, доступен ли диск для чтения
+                try:
+                    # Пробуем получить информацию о диске
+                    drive_path = drive_letter + '\\'
+                    if os.path.exists(drive_path):
+                        drives.append(drive_letter)
+                except (PermissionError, OSError):
+                    # Пропускаем диски без доступа
+                    continue
+
+        return drives if drives else ['C:']  # Минимум диск C:
+
+    except AttributeError:
+        # WinAPI не доступен
+        print("Windows API не доступен")
+        return ['C:']
+    except OSError as e:
+        # Ошибка Windows API
+        print(f"Windows API error: {e}")
+        return ['C:']
+    except Exception as e:
+        # Любая другая ошибка
+        print(f"Unexpected error getting drives: {e}")
+        return ['C:']
+
 
 def list_directory(path: str) -> Tuple[bool, List[Dict[str, Any]]]:
     """Отображение содержимого каталога в Windows"""
-    # TODO: Используя utils.safe_windows_listdir(), получить содержимое
-    # Для каждого элемента вернуть словарь с информацией:
-    # {'name': 'file.txt', 'type': 'file', 'size': 1024, 'modified': '2024-01-15', 'hidden': False}
-    # Использовать utils.is_hidden_windows_file() для проверки скрытых файлов
-    # Вернуть (True, данные) при успехе, (False, []) при ошибке
     entries = []
     try:
         items = utils.safe_windows_listdir(path)
@@ -56,7 +91,7 @@ def list_directory(path: str) -> Tuple[bool, List[Dict[str, Any]]]:
         return True, entries
     except Exception:
         return False, []
-    pass
+
 
 def format_size(size_bytes: int) -> str:
     # Форматирование размера файла
@@ -65,13 +100,10 @@ def format_size(size_bytes: int) -> str:
             return f"{size_bytes} {unit}"
         size_bytes /= 1024
     return f"{size_bytes:.2f} PB"
-    pass
+
 
 def format_directory_output(items: List[Dict[str, Any]]) -> None:
     """Форматированный вывод содержимого каталога для Windows"""
-    # TODO: Красиво отформатировать вывод используя данные из list_directory()
-    # Учесть что в Windows есть системные и скрытые файлы
-    # Показать диски если находимся в корне
     if not items:
         print("Пустая директория.")
         return
@@ -81,13 +113,10 @@ def format_directory_output(items: List[Dict[str, Any]]) -> None:
         size_str = format_size(item['size']) if item['type'] == 'file' else ''
         hidden_marker = '(скрыто)' if item['hidden'] else ''
         print(f"{type_icon} {name} {size_str} {hidden_marker}")
-    pass
+
 
 def move_up(current_path: str) -> str:
     """Переход в родительский каталог в Windows"""
-    # TODO: Использовать utils.get_parent_path() для получения родителя
-    # Проверить валидность нового пути через utils.validate_windows_path()
-    # Учесть переход между дисками
     parent_path = utils.get_parent_path(current_path)
     valid, msg = utils.validate_windows_path(parent_path)
     if valid:
@@ -95,13 +124,10 @@ def move_up(current_path: str) -> str:
     else:
         print(f"Не удалось перейти в родительский каталог: {msg}")
         return current_path
-    pass
+
 
 def move_down(current_path: str, target_dir: str) -> Tuple[bool, str]:
     """Переход в указанный подкаталог в Windows"""
-    # TODO: Проверить что target_dir существует через utils.safe_windows_listdir()
-    # Сформировать новый путь и проверить через utils.validate_windows_path()
-    # Вернуть (True, новый_путь) при успехе, (False, текущий_путь) при ошибке
     new_path = os.path.join(current_path, target_dir)
     valid, msg = utils.validate_windows_path(new_path)
     if valid:
@@ -109,17 +135,24 @@ def move_down(current_path: str, target_dir: str) -> Tuple[bool, str]:
     else:
         print(f"Ошибка при переходе: {msg}")
         return False, current_path
-    pass
+
 
 def get_windows_special_folders() -> Dict[str, str]:
     """Получение путей к специальным папкам Windows"""
-    # TODO: Вернуть словарь с путями к папкам:
-    # {'Desktop': 'C:\\Users\\...', 'Documents': '...', 'Downloads': '...'}
-    # Использовать os.environ для получения USERPROFILE и других переменных
+    # Только для Windows
+    if not utils.is_windows_os():
+        # Для Mac возвращаем домашнюю директорию
+        home_dir = os.path.expanduser('~')
+        return {
+            'Desktop': os.path.join(home_dir, 'Desktop'),
+            'Documents': os.path.join(home_dir, 'Documents'),
+            'Downloads': os.path.join(home_dir, 'Downloads')
+        }
+
+    # Для Windows
     user_profile = os.environ.get('USERPROFILE', '')
     return {
         'Desktop': os.path.join(user_profile, 'Desktop'),
         'Documents': os.path.join(user_profile, 'Documents'),
         'Downloads': os.path.join(user_profile, 'Downloads')
     }
-        pass
