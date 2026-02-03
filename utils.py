@@ -2,226 +2,295 @@ import os
 import platform
 from pathlib import Path
 from typing import Union, List, Tuple
-import ctypesimport os
-import platform
-from pathlib import Path
-from typing import Union, List, Tuple
 import re
+import local as lcl
 
 PathString = Union[str, Path]
 
 
 def is_windows_os() -> bool:
-    """Проверка что программа запущена на Windows"""
+    """Checks whether current OS is Windows.
+
+    Args:
+        None
+
+    Returns:
+        bool: True if the OS is Windows, False otherwise
+    """
+
     return platform.system() == "Windows"
 
 
 def validate_windows_path(path: PathString) -> Tuple[bool, str]:
-    """Проверка корректности Windows пути"""
-    symbols = ['/', '*', '?', '"', '<', '>', '|']
-    p_str = str(path)
-    p_obj = Path(p_str)
+    """Validates a Windows file system path according to Windows rules.
+    Performs checks for:
+    - Empty paths
+    - Drive format
+    - UNC paths
+    - Forbidden characters
+    - Reserved device names
+    - Trailing spaces or dots
+    - Path length limits
+    - Mixed or duplicate separators
+    - NTFS discouraged characters
 
-    disk_prefix = ''
+    Args:
+        path (str | Path): Path to validate.
+
+    Returns:
+        tuple:
+            bool: True if path is valid.
+            str: Validation result message.
+    """
+
+    p_str = str(path)
+
+    if not p_str.strip():
+        return False, "Путь не может быть пустым"
+
+    disk_match = re.match(r'^([A-Za-z]):', p_str)
     remaining_path = p_str
 
-    m = re.match(r'^[A-Za-z]:', p_str)
-    if m:
-        disk_prefix = m.group(0)
+    if disk_match:
+        disk_prefix = disk_match.group(0)
         remaining_path = p_str[len(disk_prefix):]
 
-    match remaining_path:
-        case x if any(smbl in symbols for smbl in x):
-            return False, "Путь содержит недопустимые символы."
-        case x if len(remaining_path) > 260:
-            return False, "Путь содержит более 260 символов."
-        case x if not p_obj.exists():
-            return False, "Путь не существует."
-        case _:
-            return True, "Путь валиден."
+        if not re.match(r'^[A-Za-z]:$', disk_prefix):
+            return False, f"{lcl.INCORRECT1}: {disk_prefix}"
+
+    elif p_str.startswith('\\'):
+        if p_str.startswith('\\\\'):
+            if len(p_str) < 4 or '\\' not in p_str[2:]:
+                return False, f'{lcl.INCORRECT2}'
 
 
-def format_size(size_bytes: int) -> str:
-    """Форматирование размера файла в читаемом виде для Windows"""
-    # TODO: Преобразовать байты в удобочитаемый формат
-    # Пример: 1024 -> "1.0 KB", 1500000 -> "1.4 MB"
-    # Учесть что в Windows используются единицы: KB, MB, GB (не KiB, MiB)
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
+    forbidden_chars = ['<', '>', ':', '"', '|', '?', '*']
 
-    KB = 1024
-    MB = KB * 1024
-    GB = MB * 1024
-    TB = GB * 1024
+    colon_count = p_str.count(':')
+    if colon_count > 1:
+        return False, f'{lcl.COLON1}'
 
-    if size_bytes < MB:
-        return f"{size_bytes / KB:.1f} KB"
-    elif size_bytes < GB:
-        return f"{size_bytes / MB:.1f} MB"
-    elif size_bytes < TB:
-        return f"{size_bytes / GB:.1f} GB"
+    if colon_count == 1 and not disk_match:
+        return False, f'{lcl.COLON2}'
+    for char in forbidden_chars:
+        if char in remaining_path:
+            return False, f" f'{lcl.SYMBOL}' : '{char}'"
+
+    reserved_names = [
+        'CON', 'PRN', 'AUX', 'NUL',
+        'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+        'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+    ]
+
+    path_parts = [part for part in re.split(r'[\\/]+', remaining_path) if part]
+
+    for part in path_parts:
+        name_without_ext = os.path.splitext(part)[0].upper()
+        if name_without_ext in reserved_names:
+            return False, f"f'{lcl.NAME1}' : {part}"
+
+        if part.endswith('.'):
+            return False, f'{lcl.NAME2}'
+        if part.endswith(' '):
+            return False, f'{lcl.NAME3}'
+        if part.startswith(' '):
+            return False, f'{lcl.NAME4}'
+
+    if p_str.startswith('\\\\?\\'):
+        if len(p_str) > 32767:
+            return False, (f'{lcl.PATH1}' + f"{len(p_str)}" + f'{lcl.PATH2}')
     else:
-        return f"{size_bytes / TB:.1f} TB"
+        if len(p_str) > 260:
+            return False, f'{lcl.PATH3}' + f"{len(p_str)}" + f'{lcl.PATH4}'
 
+    if '\\' in p_str and '/' in p_str:
+        return False, f'{lcl.SEPARATOR1}'
 
-def get_parent_path(path: PathString) -> str:
-    """Получение родительского каталога с учетом Windows путей"""
-    p_str = str(path)
-    parent = os.path.dirname(p_str)
-    if os.path.splitdrive(parent)[1] == "":
-        parent = os.path.join(parent, "")
-    return parent
+    if p_str.startswith('\\\\?\\'):
+        path_after_prefix = p_str[4:]
+        if re.search(r'[\\/]{2,}', path_after_prefix):
+            return False, f'{lcl.SEPARATOR2}'
+    elif p_str.startswith('\\\\'):
+        match = re.match(r'^(\\\\[^\\/]+[\\/])(.*)', p_str)
+        if match:
+            prefix, rest = match.groups()
+            if re.search(r'[\\/]{2,}', rest):
+                return False, f'{lcl.SEPARATOR3}'
+    else:
+        if re.search(r'[\\/]{2,}', p_str):
+            return False, f'{lcl.SEPARATOR2}'
 
+    not_recommended_chars = ['$', '%', '&', "'", '+', ',', ';', '=',
+                             '@','[', ']', '^', '`', '{', '}', '~']
+    found_not_recommended = []
+    for char in not_recommended_chars:
+        if char in remaining_path:
+            found_not_recommended.append(char)
 
-def safe_windows_listdir(path: PathString) -> List[str]:
-    """Безопасное получение содержимого каталога в Windows"""
-    try:
-        p_str = str(path)
-        return os.listdir(p_str)
-    except (PermissionError, FileNotFoundError, OSError):
-        return []
+    if found_not_recommended:
+        warning = (f'{lcl.SYMBOLS}', f"{', '.join(found_not_recommended)})")
+        return True, f'{lcl.VALID}' + f"{warning}"
 
-
-def is_hidden_windows_file(path: PathString) -> bool:
-    """Проверка является ли файл скрытым в Windows с обработкой ошибок"""
-    p_str = str(path)
-
-    if not Path(p_str).exists():
-        return False
-
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        file_attribute_hidden = 0x02
-
-        # Более безопасный вызов WinAPI
-        GetFileAttributesW = ctypes.windll.kernel32.GetFileAttributesW
-        GetFileAttributesW.argtypes = [wintypes.LPCWSTR]
-        GetFileAttributesW.restype = wintypes.DWORD
-
-        attrs = GetFileAttributesW(p_str)
-
-        # Проверка на ошибку (INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF)
-        if attrs == 0xFFFFFFFF:
-            # Получаем код ошибки
-            last_error = ctypes.windll.kernel32.GetLastError()
-
-            # Обработка специфичных Windows ошибок
-            ERROR_FILE_NOT_FOUND = 2
-            ERROR_PATH_NOT_FOUND = 3
-            ERROR_ACCESS_DENIED = 5
-
-            if last_error in [ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND]:
-                return False
-            elif last_error == ERROR_ACCESS_DENIED:
-                # Если доступ запрещен, возможно это системный файл
-                return True
-            else:
-                return False
-
-        return bool(attrs & file_attribute_hidden)
-
-    except AttributeError:
-        # ctypes.windll.kernel32 не доступен (не Windows)
-        return False
-    except OSError as e:
-        # Windows-специфичные OSError
-        print(f"Windows API error checking hidden attribute: {e}")
-        return False
-    except Exception as e:
-        # Любая другая ошибка
-        print(f"Unexpected error checking hidden file: {e}")
-        return False
-import re
-from unittest import case
-
-PathString = Union[str, Path]
-
-def is_windows_os() -> bool:
-    """Проверка что программа запущена на Windows"""
-    return platform.system() == "Windows"
-
-
-def validate_windows_path(path: PathString) -> Tuple[bool, str]:
-    """Проверка корректности Windows пути"""
-    symbols = ['/', '*', '?', '"', '<', '>', '|']
-    p_str = str(path)
-    p_obj = Path(p_str)
-
-    disk_prefix = ''
-    remaining_path = p_str
-
-    m = re.match(r'^[A-Za-z]:', p_str)
-    if m:
-        disk_prefix = m.group(0)
-        remaining_path = p_str[len(disk_prefix):]
-
-    match remaining_path:
-        case x if any(smbl in symbols for smbl in x):
-            return False, "Путь содержит недопустимые символы."
-        case x if len(remaining_path) > 260:
-            return False, "Путь содержит более 260 символов."
-        case x if not p_obj.exists():
-            return False, "Путь не существует."
-        case _:
-            return True, "Путь валиден."
+    return True, f'{lcl.VALID}'
 
 
 def format_size(size_bytes: int) -> str:
-    """Форматирование размера файла в читаемом виде для Windows"""
-    # TODO: Преобразовать байты в удобочитаемый формат
-    # Пример: 1024 -> "1.0 KB", 1500000 -> "1.4 MB"
-    # Учесть что в Windows используются единицы: KB, MB, GB (не KiB, MiB)
+    """Converts a file size in bytes to a human-readable Windows-style format.
+
+    Args:
+        size_bytes (int): File size in bytes.
+
+    Returns:
+        str: Formatted size string (b, kb, mb, gb, tb)
+    """
+
     if size_bytes < 1024:
         return f"{size_bytes} B"
-    KB = 1024
-    MB = KB * 1024
-    GB = MB * 1024
-    TB = GB * 1024
 
-    match size_bytes:
-        case size if size < KB:
-            return f"{size_bytes} B"
-        case size if KB <= size < MB:
-            return f"{round(size_bytes / KB, 1)} KB"
-        case size if MB <= size < GB:
-            return f"{round(size_bytes / MB, 1)} MB"
-        case size if GB <= size < TB:
-            return f"{round(size_bytes / GB, 1)} GB"
-    pass
+    kb = 1024
+    mb = kb * 1024
+    gb = mb * 1024
+    tb = gb * 1024
+
+    if size_bytes < mb:
+        return f"{size_bytes / kb:.1f} KB"
+    elif size_bytes < gb:
+        return f"{size_bytes / mb:.1f} MB"
+    elif size_bytes < tb:
+        return f"{size_bytes / gb:.1f} GB"
+    else:
+        return f"{size_bytes / tb:.1f} TB"
+
 
 def get_parent_path(path: PathString) -> str:
-    """Получение родительского каталога с учетом Windows путей"""
+    """Returns the parent directory of a path with Windows root handling.
+    Ensures drive roots end with backslash (C:\\).
+
+    Args:
+        path (str | Path): Input path.
+
+    Returns:
+        str: Parent directory path.
+    """
+
     p_str = str(path)
     parent = os.path.dirname(p_str)
-    if os.path.splitdrive(parent)[1] == "":
+
+    if platform.system() == "Windows":
+        if re.match(r'^[A-Za-z]:$', parent):
+            parent = parent + '\\'
+        elif re.match(r'^[A-Za-z]:\\$', parent):
+            pass
+    elif os.path.splitdrive(parent)[1] == "":
         parent = os.path.join(parent, "")
+
     return parent
 
 
 def safe_windows_listdir(path: PathString) -> List[str]:
-    """Безопасное получение содержимого каталога в Windows"""
+    """Safely lists directory contents on Windows.
+
+    Handles PermissionError, FileNotFoundError and OS errors silently.
+
+    Args:
+        path (str | Path): Directory path.
+
+    Returns:
+        list: List of file and folder names, or empty list on failure.
+    """
+
     try:
         p_str = str(path)
         return os.listdir(p_str)
     except (PermissionError, FileNotFoundError, OSError):
         return []
 
+
 def is_hidden_windows_file(path: PathString) -> bool:
-    """Проверка является ли файл скрытым в Windows"""
+    """Determines whether a file is hidden.
+
+    On Windows uses WinAPI FILE_ATTRIBUTE_HIDDEN.
+    On Unix-like systems checks for leading dot.
+
+    Args:
+        path (str | Path): File path.
+
+    Returns:
+        bool: True if file is hidden, otherwise False.
+    """
+
     p_str = str(path)
 
     if not Path(p_str).exists():
         return False
 
-    file_attribute_hidden = 0x02
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+            from ctypes import wintypes
 
-    try:
-        attrs = ctypes.windll.kernel32.GetFileAttributesW(str(p_str))
-        if attrs == -1:
-            return False
-        return bool(attrs & file_attribute_hidden)
-    except Exception:
-        return False
-      
+            file_attribute_hidden = 0x02
+
+            GetFileAttributesW = ctypes.windll.kernel32.GetFileAttributesW
+            GetFileAttributesW.argtypes = [wintypes.LPCWSTR]
+            GetFileAttributesW.restype = wintypes.DWORD
+
+            attrs = GetFileAttributesW(p_str)
+
+            if attrs == 0xFFFFFFFF:
+                last_error = ctypes.windll.kernel32.GetLastError()
+                error_access_denied = 5
+
+                if last_error == error_access_denied:
+                    return True
+                return False
+
+            return bool(attrs & file_attribute_hidden)
+
+        except Exception:
+            pass
+
+    return os.path.basename(p_str).startswith('.')
+
+
+def get_windows_reserved_names() -> List[str]:
+    """Returns the list of Windows reserved device names.
+
+    Includes CON, PRN, AUX, NUL, COM1–COM9, LPT1–LPT9.
+
+    Args:
+        None
+
+    Returns:
+        list: Reserved Windows filenames.
+    """
+
+    return [
+        'CON', 'PRN', 'AUX', 'NUL',
+        'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+        'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+    ]
+
+
+def normalize_windows_path(path: str) -> str:
+    """Normalizes a Windows path.
+
+    - Converts forward slashes to backslashes
+    - Removes duplicate separators
+    - Removes trailing backslash unless path is drive root
+
+    Args:
+        path (str): Input path.
+
+    Returns:
+        str: Normalized Windows path.
+    """
+
+    path = path.replace('/', '\\')
+
+    path = re.sub(r'\\\\+', '\\', path)
+
+    if path.endswith('\\') and not re.match(r'^[A-Za-z]:\\$', path):
+        path = path.rstrip('\\')
+
+    return path
