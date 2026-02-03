@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 import utils
+import local as lcl
 
 
 def get_current_drive() -> str:
@@ -44,7 +45,7 @@ def list_available_drives() -> List[str]:
 
         if drives_bitmask == 0:
             last_error = ctypes.windll.kernel32.GetLastError()
-            print(f"Windows API error GetLogicalDrives: code {last_error}")
+            print(f"Windows API error GetLogicalDrives: {lcl.CODE} {last_error}")
             return ["C:"]
 
         drives = []
@@ -150,7 +151,7 @@ Args:
                                       by list_directory().
     """
     if not items:
-        print("Пустая директория.")
+        print(f"{lcl.EMPTY_DIRECTORY}")
         return
 
     for item in items:
@@ -161,7 +162,7 @@ Args:
             if item["type"] == "file"
             else ""
         )
-        hidden_marker = "(скрыто)" if item["hidden"] else ""
+        hidden_marker = f"{lcl.HIDDEN}" if item["hidden"] else ""
 
         print(f"{type_icon} {name} {size_str} {hidden_marker}")
 
@@ -183,7 +184,7 @@ def move_up(current_path: str) -> str:
     if valid:
         return parent_path
 
-    print(f"Не удалось перейти в родительский каталог: {msg}")
+    print(f"{lcl.FAILED_NAV_PARENT_D} {msg}")
     return current_path
 
 
@@ -206,7 +207,7 @@ def move_down(current_path: str, target_dir: str) -> Tuple[bool, str]:
     if valid:
         return True, new_path
 
-    print(f"Ошибка при переходе: {msg}")
+    print(f"{lcl.ERROR_DURING_TRANSITION} {msg}")
     return False, current_path
 
 
