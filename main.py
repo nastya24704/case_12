@@ -289,7 +289,7 @@ def main() -> NoReturn:
             print(f'{lcl.CONTINUE}')
 
     print(f'\n{lcl.THANKS}')
-    return 0
+    sys.exit(0)
 
 
 if __name__ == "__main__":
