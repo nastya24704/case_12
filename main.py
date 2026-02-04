@@ -23,7 +23,7 @@ def check_windows_environment() -> bool:
     if not utils.is_windows_os():
         print("=" * 60)
         print(f'{lcl.SYSTEM1}')
-        print(f'{lcl.SYSTEM2}' f"{sys.platform}")
+        print(f'{lcl.SYSTEM2} {sys.platform}')
         print("=" * 60)
         return False
     return True
