@@ -332,7 +332,7 @@ def search_menu_handler(current_path: str) -> bool:
                     case_sensitive = input(f'{lcl.REG_SENS}').strip().lower()
                     is_case_sensitive = case_sensitive in [f'{lcl.YES}', f'{lcl.LETTER}', 'yes', 'y']
                     files = find_files_windows(pattern, current_path, is_case_sensitive)
-                    print(f"\n{lcl.FIND} {len(files)} f'{lcl.FILES_SAMPLE}' '{pattern}':")
+                    print(f"\n{lcl.FIND} {len(files)} {lcl.FILES_SAMPLE} '{pattern}':")
                     for f in files:
                         print(f"  {os.path.basename(f)} - {f}")
                 else:
@@ -358,14 +358,14 @@ def format_windows_search_results(results: List[Dict[str, Any]],
         search_type (str): Search description.
     """
     print("\n" + "=" * 80)
-    print(f"{lcl.RESULT_TYPE}' {search_type}")
+    print(f"{lcl.RESULT_TYPE} {search_type}")
     print("=" * 80)
 
     if not results:
         print(f'{lcl.NOT_RESULT}')
         return
 
-    print(f"{f'{lcl.FILE_NAME}':<40} {f'{lcl.SIZE}':<15} {f'{lcl.P}':<30}")
+    print(f"{lcl.FILE_NAME:<40} {lcl.SIZE:<15} {lcl.P:<30}")
     print("-" * 80)
 
     for item in results:
