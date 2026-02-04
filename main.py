@@ -50,7 +50,7 @@ def display_windows_banner() -> None:
     print("=" * 70)
 
     current_drive = navigation.get_current_drive()
-    print(f'{lcl.DISK1}' f"{current_drive}")
+    print(f'{lcl.DISK1} {current_drive}')
 
     drives = navigation.list_available_drives()
     print(f'{lcl.DISK2} {', '.join(drives)}')
@@ -106,7 +106,7 @@ def handle_windows_navigation(command: str, current_path: str) -> str:
 
     if command == "5":
         new_path = navigation.move_up(current_path)
-        print(f'{lcl.CHANGE}' f"{new_path}")
+        print(f'{lcl.CHANGE} {new_path}')
         return new_path
 
     elif command == "6":
@@ -114,10 +114,10 @@ def handle_windows_navigation(command: str, current_path: str) -> str:
         if dir_name:
             success, new_path = navigation.move_down(current_path, dir_name)
             if success:
-                print(f'{lcl.CHANGE}' f"{new_path}")
+                print(f'{lcl.CHANGE} {new_path}')
                 return new_path
             else:
-                print(f'{lcl.FAILED}' f"{dir_name}")
+                print(f'{lcl.FAILED} {dir_name}')
 
     elif command == "7":
         drives = navigation.list_available_drives()
@@ -133,10 +133,10 @@ def handle_windows_navigation(command: str, current_path: str) -> str:
                 valid, msg = utils.validate_windows_path(new_path)
                 if valid:
                     os.chdir(new_path)
-                    print(f'{lcl.DISK4}' f"{new_drive}")
+                    print(f'{lcl.DISK4} {new_drive}')
                     return os.getcwd()
                 else:
-                    print(f'{lcl.ERROR}' f"{msg}")
+                    print(f'{lcl.ERROR} {msg}')
             else:
                 print(f'{lcl.DISK5}')
         except ValueError:
